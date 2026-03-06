@@ -1,0 +1,140 @@
+@page "/cook/orders"
+@implements IDisposable
+@inject IHttpClientFactory HttpClientFactory
+
+<PageTitle>Manage Orders</PageTitle>
+
+<h1>Active Orders</h1>
+
+@if (orders == null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (!orders.Any())
+{
+    <div class="alert alert-info">No active orders at the moment.</div>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Food</th>
+                <th>Ordered At</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var order in orders.OrderBy(o => o.CreatedAt))
+            {
+                <tr>
+                    <td>@order.Id</td>
+                    <td>@order.FoodName</td>
+                    <td>@order.CreatedAt.ToLocalTime().ToShortTimeString()</td>
+                    <td><span class="badge @GetStatusBadge(order.Status)">@order.Status</span></td>
+                    <td>
+                        @if (order.Status == "Preparing")
+                        {
+                            <button class="btn btn-sm btn-success me-1" @onclick="() => UpdateStatus(order.Id, 1)">Mark Ready</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => UpdateStatus(order.Id, 2)">Cancel</button>
+                        }
+                        else if (order.Status == "Ready" || order.Status == "Cancelled")
+                        {
+                            <button class="btn btn-sm btn-primary" @onclick="() => UpdateStatus(order.Id, 3)">Complete</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="alert @(isError ? "alert-danger" : "alert-success") mt-3">@statusMessage</div>
+}
+
+@code {
+    private List<OrderDto>? orders;
+    private string statusMessage = string.Empty;
+    private bool isError = false;
+    private System.Net.Http.HttpClient? sseClient;
+    private CancellationTokenSource? cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOrders();
+        _ = Task.Run(ListenForSseUpdates);
+    }
+
+    private async Task LoadOrders()
+    {
+        var client = HttpClientFactory.CreateClient("WebApi");
+        orders = await client.GetFromJsonAsync<List<OrderDto>>("/orders");
+    }
+
+    private async Task UpdateStatus(int orderId, int newStatus)
+    {
+        statusMessage = string.Empty;
+        var client = HttpClientFactory.CreateClient("WebApi");
+        var response = await client.PatchAsJsonAsync($"/orders/{orderId}/status", new { NewStatus = newStatus });
+
+        if (response.IsSuccessStatusCode)
+        {
+            isError = false;
+            statusMessage = "Order updated.";
+            await LoadOrders();
+        }
+        else
+        {
+            isError = true;
+            statusMessage = await response.Content.ReadAsStringAsync();
+        }
+    }
+
+    private async Task ListenForSseUpdates()
+    {
+        try
+        {
+            cts = new CancellationTokenSource();
+            sseClient = HttpClientFactory.CreateClient("WebApi");
+            using var stream = await sseClient.GetStreamAsync("/orders/events", cts.Token);
+            using var reader = new System.IO.StreamReader(stream);
+
+            while (!cts.Token.IsCancellationRequested && !reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync(cts.Token);
+                if (line?.StartsWith("data:") == true)
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await LoadOrders();
+                        StateHasChanged();
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { }
+    }
+
+    private static string GetStatusBadge(string status) => status switch
+    {
+        "Preparing" => "bg-warning text-dark",
+        "Ready" => "bg-success",
+        "Cancelled" => "bg-danger",
+        "Completed" => "bg-primary",
+        _ => "bg-secondary"
+    };
+
+    public void Dispose()
+    {
+        cts?.Cancel();
+        cts?.Dispose();
+        sseClient?.Dispose();
+    }
+
+    private record OrderDto(int Id, int MenuItemId, string FoodName, DateTime CreatedAt, string Status);
+}
