@@ -1,0 +1,94 @@
+@page "/foods/create"
+@page "/foods/{Id:int}/edit"
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Navigation
+
+<PageTitle>@(Id == null ? "Add Food" : "Edit Food")</PageTitle>
+
+<h1>@(Id == null ? "Add Food" : "Edit Food")</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <EditForm Model="model" OnValidSubmit="HandleSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-3">
+                <label class="form-label">Name</label>
+                <InputText class="form-control" @bind-Value="model.Name" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" @bind-Value="model.Description" rows="3" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Price (CZK)</label>
+                <InputNumber class="form-control" @bind-Value="model.Price" />
+            </div>
+
+            <button type="submit" class="btn btn-primary">@(Id == null ? "Create" : "Save")</button>
+            <a href="/foods" class="btn btn-secondary ms-2">Cancel</a>
+        </EditForm>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">@errorMessage</div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private FoodModel model = new();
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id is not null)
+        {
+            var client = HttpClientFactory.CreateClient("WebApi");
+            var food = await client.GetFromJsonAsync<FoodDto>($"/foods/{Id}");
+            if (food is not null)
+            {
+                model.Name = food.Name;
+                model.Description = food.Description;
+                model.Price = food.Price;
+            }
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        errorMessage = string.Empty;
+        var client = HttpClientFactory.CreateClient("WebApi");
+
+        HttpResponseMessage response;
+        if (Id == null)
+        {
+            response = await client.PostAsJsonAsync("/foods", new { model.Name, model.Description, model.Price });
+        }
+        else
+        {
+            response = await client.PutAsJsonAsync($"/foods/{Id}", new { model.Name, model.Description, model.Price });
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            Navigation.NavigateTo("/foods");
+        }
+        else
+        {
+            errorMessage = $"Error: {response.StatusCode}";
+        }
+    }
+
+    private class FoodModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+    }
+
+    private record FoodDto(int Id, string Name, string Description, decimal Price, bool IsActive);
+}

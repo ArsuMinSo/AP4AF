@@ -1,0 +1,88 @@
+@page "/foods"
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Navigation
+
+<PageTitle>Foods</PageTitle>
+
+<h1>Foods</h1>
+
+@if (foods == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <a href="/foods/create" class="btn btn-success mb-3">Add New Food</a>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var food in foods)
+            {
+                <tr class="@(food.IsActive ? "" : "table-secondary")">
+                    <td>@food.Name</td>
+                    <td>@food.Description</td>
+                    <td>@food.Price.ToString("C")</td>
+                    <td>
+                        @if (food.IsActive)
+                        {
+                            <span class="badge bg-success">Active</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Inactive</span>
+                        }
+                    </td>
+                    <td>
+                        <a href="/foods/@food.Id/edit" class="btn btn-sm btn-primary">Edit</a>
+                        @if (food.IsActive)
+                        {
+                            <button class="btn btn-sm btn-warning ms-1" @onclick="() => DeactivateFood(food.Id)">Deactivate</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-info">@message</div>
+}
+
+@code {
+    private List<FoodDto>? foods;
+    private string message = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFoods();
+    }
+
+    private async Task LoadFoods()
+    {
+        var client = HttpClientFactory.CreateClient("WebApi");
+        foods = await client.GetFromJsonAsync<List<FoodDto>>("/foods");
+    }
+
+    private async Task DeactivateFood(int id)
+    {
+        var client = HttpClientFactory.CreateClient("WebApi");
+        var response = await client.PatchAsync($"/foods/{id}/deactivate", null);
+        if (response.IsSuccessStatusCode)
+        {
+            message = "Food deactivated successfully.";
+            await LoadFoods();
+        }
+    }
+
+    private record FoodDto(int Id, string Name, string Description, decimal Price, bool IsActive);
+}
