@@ -1,6 +1,4 @@
-using Microsoft.EntityFrameworkCore;
 using UTB.Minute.Db;
-using UTB.Minute.Db.Entities;
 using UTB.Minute.DbManager;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,12 +10,14 @@ var app = builder.Build();
 
 app.MapDefaultEndpoints();
 
-app.MapPost("/db/reset", async (AppDbContext db) =>
+app.MapPost("/reset-db", async (AppDbContext db) =>
 {
     await db.Database.EnsureDeletedAsync();
-    await db.Database.MigrateAsync();
+    await db.Database.EnsureCreatedAsync();
     await DatabaseSeeder.SeedAsync(db);
     return Results.Ok("Database reset and seeded successfully.");
 });
+
+app.UseHttpsRedirection();
 
 app.Run();
