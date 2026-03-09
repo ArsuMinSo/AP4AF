@@ -11,7 +11,7 @@ if (builder.Environment.IsEnvironment("Testing"))
 else
 {
     postgres = builder.AddPostgres("postgres")
-                      .WithPgAdmin()
+                      .WithPgAdmin(pgAdmin => pgAdmin.WithLifetime(ContainerLifetime.Persistent))
                       .WithDataVolume()
                       .WithLifetime(ContainerLifetime.Persistent);
 }
