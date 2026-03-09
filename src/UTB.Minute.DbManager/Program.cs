@@ -8,6 +8,13 @@ builder.AddNpgsqlDbContext<AppDbContext>("minutedb");
 
 var app = builder.Build();
 
+// Automatically create the database schema on startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.EnsureCreatedAsync();
+}
+
 app.MapDefaultEndpoints();
 
 app.MapPost("/reset-db", async (AppDbContext db) =>
