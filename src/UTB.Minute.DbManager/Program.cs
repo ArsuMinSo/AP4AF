@@ -18,6 +18,4 @@ app.MapPost("/reset-db", async (AppDbContext db) =>
     return Results.Ok("Database reset and seeded successfully.");
 });
 
-app.UseHttpsRedirection();
-
 app.Run();
